@@ -6,11 +6,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 ////////
 import java.util.Observable;
 import java.util.Observer;
+import java.util.TreeSet;
 
 import javax.swing.table.AbstractTableModel;
 import javax.validation.constraints.Null;
@@ -53,6 +55,7 @@ public class Accounts_Transactions_TableModel extends AbstractTableModel impleme
 	public static final int COLUMN_RECIPIENT = 7;
 	public static final int COLUMN_MESSAGE = 8;
 	public static final int COLUMN_CONFIRM = 9;
+	public static final int COLUMN_ACTION_TYPE = 10;
 
 	private List<Transaction> r_Trans;
 	private HashMap<String, Trans> trans_Hash_Map;
@@ -60,7 +63,7 @@ public class Accounts_Transactions_TableModel extends AbstractTableModel impleme
 	private boolean isEncrypted = true;
 
 	private String[] columnNames = Lang.getInstance().translate(new String[] { "Date", "Block", "RecNo", "Amount",
-			"Asset", "Type", "Sender", "Recipient", "Title", "Confirmation" });
+			"Asset", "Type", "Sender", "Recipient", "Title", "Confirmation", "type1" });
 	private Boolean[] column_AutuHeight = new Boolean[] { false, true, true, false, false };
 
 	private SortableList<Tuple2<String, String>, Transaction> ss;
@@ -71,6 +74,8 @@ public class Accounts_Transactions_TableModel extends AbstractTableModel impleme
 	private byte[] privateKey;
 
 	private byte[] publicKey;
+
+	private HashSet actionTypes;
 
 	public Accounts_Transactions_TableModel() {
 		sender = new Account("");
@@ -198,11 +203,20 @@ public class Accounts_Transactions_TableModel extends AbstractTableModel impleme
 			return r_Tran.transaction.viewTimestamp();
 		case COLUMN_BLOCK:
 
-			if (r_Tran.transaction.isConfirmed(DBSet.getInstance())) return r_Tran.transaction.getBlock(DBSet.getInstance()).getHeight(DBSet.getInstance());
+			if (r_Tran.transaction.isConfirmed(DBSet.getInstance())){
+			String m = r_Tran.transaction.getBlock(DBSet.getInstance()).getHeight(DBSet.getInstance()) + "";
+			String d = r_Tran.transaction.getSeqNo(DBSet.getInstance())+ "";
+			int zz = 5 - d.length();
+			for (int z = 0; z<zz; z++ ){
+				d = "0"+ d;
+			}
+			String bd = m+"."+ d;
+				return new BigDecimal(bd).setScale(5);
+			}
 			return -1;
 		case COLUMN_TRANSACTION:
 
-			if (r_Tran.transaction.isConfirmed(DBSet.getInstance())) return r_Tran.transaction.getSeqNo(DBSet.getInstance());
+			if (r_Tran.transaction.isConfirmed(DBSet.getInstance())) return r_Tran.transaction.getBlock(DBSet.getInstance()).getHeight(DBSet.getInstance()) + "-" + r_Tran.transaction.getSeqNo(DBSet.getInstance());
 			return -1;
 		case COLUMN_AMOUNT:
 		//	if (r_Tran.transaction.getType() == Transaction.GENESIS_SEND_ASSET_TRANSACTION)
@@ -211,8 +225,7 @@ public class Accounts_Transactions_TableModel extends AbstractTableModel impleme
 			return Controller.getInstance().getAsset(r_Tran.transaction.getAbsKey()).toString();
 			
 		case COLUMN_TYPE:
-			
-			return r_Tran.transaction.viewTypeName();
+			return r_Tran.transaction.viewFullTypeName();
 		case COLUMN_RECIPIENT:
 			return r_Tran.transaction.viewRecipient();
 		case COLUMN_SENDER:
@@ -267,6 +280,21 @@ public class Accounts_Transactions_TableModel extends AbstractTableModel impleme
 			} catch (UnsupportedEncodingException | InvalidCipherTextException e1) {
 				return ("unknown password");
 			}
+		case COLUMN_ACTION_TYPE:
+			
+			/*
+			if (r_Tran.transaction.getType() == Transaction.SEND_ASSET_TRANSACTION){
+				R_Send rs1 = ((R_Send) r_Tran.transaction);
+				return rs1.viewFullTypeName();
+				
+			}else{
+				GenesisTransferAssetTransaction rs2 = (GenesisTransferAssetTransaction)r_Tran.transaction;
+				
+				return rs2.viewFullTypeName();
+			}
+			*/
+			
+			return r_Tran.transaction.viewFullTypeName();
 
 		}
 
@@ -314,7 +342,7 @@ public class Accounts_Transactions_TableModel extends AbstractTableModel impleme
 				get_R_Send();
 			}
 
-			this.fireTableDataChanged();
+		//	this.fireTableDataChanged();
 		}
 
 		// CHECK IF LIST UPDATED
@@ -327,13 +355,17 @@ public class Accounts_Transactions_TableModel extends AbstractTableModel impleme
 				if ( message.getType() == ObserverMessage.REMOVE_TRANSACTION_TYPE) {
 					//get_R_Send();
 					Object sss = message.getValue();
-				
-		trans_Hash_Map.remove((Transaction) message.getValue());
+					if (sss != null && trans_Hash_Map != null)
+						trans_Hash_Map.remove((Transaction) sss);
 
 				}
 		
 		
 		
+	}
+	public void set_ActionTypes(HashSet str){
+		actionTypes = str;
+				
 	}
 
 	public void get_R_Send() {
@@ -373,11 +405,26 @@ public class Accounts_Transactions_TableModel extends AbstractTableModel impleme
 				trr.transaction = tttt;
 				trr.ammount = tttt.getAmount();
 	//if send for *-1
+				// view all types
+				if (actionTypes == null || actionTypes.size() == 0 ){
+				
 				if (tttt.getCreator().getAddress().equals(this.sender.getAddress()))
 					trr.ammount = tttt.getAmount().multiply(new BigDecimal("-1"));
 	
 			
-				trans_Hash_Map.put(ttt.viewSignature(), trr);		
+				trans_Hash_Map.put(ttt.viewSignature(), trr);
+				return;
+				}
+				// view set types
+				if (actionTypes.contains(tttt.viewFullTypeName())){
+					
+					if (tttt.getCreator().getAddress().equals(this.sender.getAddress()))
+						trr.ammount = tttt.getAmount().multiply(new BigDecimal("-1"));
+		
+				
+					trans_Hash_Map.put(ttt.viewSignature(), trr);
+					}
+					
 			
 			
 		} 
@@ -410,10 +457,16 @@ public class Accounts_Transactions_TableModel extends AbstractTableModel impleme
 				if (ttt1.getOwner() != null) trr.owner = ttt1.getOwner();
 				trr.recipient = ttt1.getRecipient();
 					
-									
-	
+				// view all types					
+				if (actionTypes == null || actionTypes.size() == 0 ){
 			
-				trans_Hash_Map.put(ttt.viewSignature(), trr);	
+				trans_Hash_Map.put(ttt.viewSignature(), trr);
+				return;
+				}
+				// view set types
+				if (actionTypes.contains(ttt1.viewTypeName())){
+					trans_Hash_Map.put(ttt.viewSignature(), trr);
+				}
 			}
 		}
 					

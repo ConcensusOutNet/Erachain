@@ -119,8 +119,8 @@ public class Controller extends Observable {
 	
 	// IF new abilities is made - new license insert in CHAIN and set this KEY
 	public static final long LICENSE_KEY = 1006l;
-	public static final String APP_NAME = BlockChain.DEVELOP_USE?"ERA-DEVELOP":"ERA";
-	private static final String version = "3.04.04";
+	public static final String APP_NAME = BlockChain.DEVELOP_USE?"Erachain-dev":"Erachain";
+	private static final String version = "3.06.01 alpha";
 	private static final String buildTime = "2017-05-21 15:33:33 UTC";
 	private static long buildTimestamp;
 	
@@ -1433,7 +1433,7 @@ public class Controller extends Observable {
 	public void banPeerOnError(Peer peer, String mess) {
 		if ( Settings.getInstance().getMaxConnections() - this.network.getActivePeersCounter(false) < 1 ) {
 			// BAN if ALL connection USED
-			this.network.tryDisconnect(peer, 30, "ban PeerOnError - " + mess);			
+			this.network.tryDisconnect(peer, Synchronizer.BAN_BLOCK_TIMES>>2, "ban PeerOnError - " + mess);			
 		}
 	}
 
@@ -1552,7 +1552,7 @@ public class Controller extends Observable {
 				byte[] lastBlockSignature = dbSet.getBlockMap().getLastBlockSignature();
 
 				try {
-					Block maxBlock = core.Synchronizer.getBlock(lastBlockSignature, maxHW.c);
+					Block maxBlock = core.Synchronizer.getBlock(lastBlockSignature, maxHW.c, true);
 					if (maxBlock != null) {
 						// SAME LAST BLOCK
 						//this.blockChain.getHWeight(dbSet, false);
@@ -1617,38 +1617,37 @@ public class Controller extends Observable {
 		//int lastTrueBlockHeight = this.getMyHeight() - Settings.BLOCK_MAX_SIGNATURES;
 		int checkPointHeight = this.getBlockChain().getCheckPoint(dbSet);
 		
-		try {
-			// WHILE NOT UPTODATE
-			do {
-				// START UPDATE FROM HIGHEST HEIGHT PEER
-				// withWinBuffer = true
-				Tuple3<Integer, Long, Peer> peerHW = this.getMaxPeerHWeight(true);				
-				if (peerHW != null) {
-					peer = peerHW.c;
-					if (peer != null) {
-						info = "update from MaxHeightPeer:" + peer.getAddress().getHostAddress()
-								+ " WH: " + getHWeightOfPeer(peer);
-						LOGGER.info(info);
-						about_frame.set_console_Text(info);
+		// WHILE NOT UPTODATE
+		do {
+			// START UPDATE FROM HIGHEST HEIGHT PEER
+			// withWinBuffer = true
+			Tuple3<Integer, Long, Peer> peerHW = this.getMaxPeerHWeight(true);				
+			if (peerHW != null) {
+				peer = peerHW.c;
+				if (peer != null) {
+					info = "update from MaxHeightPeer:" + peer.getAddress().getHostAddress()
+							+ " WH: " + getHWeightOfPeer(peer);
+					LOGGER.info(info);
+					about_frame.set_console_Text(info);
+					try {
 						// SYNCHRONIZE FROM PEER
 						this.synchronizer.synchronize(dbSet, checkPointHeight, peer);						
+					} catch (Exception e) {
+						LOGGER.error(e.getMessage(), e);
+
+						/*
+						if (peer != null && peer.isUsed()) {
+							// DISHONEST PEER
+							this.network.tryDisconnect(peer, 2 * BlockChain.GENERATING_MIN_BLOCK_TIME / 60, e.getMessage());
+						}
+						*/
 					}
-
-					blockchainSyncStatusUpdate(getMyHeight());
-					
 				}
-			} while (!dbSet.isStoped() && !this.isUpToDate());
-			
-		} catch (Exception e) {
-			LOGGER.error(e.getMessage(), e);
 
-			/*
-			if (peer != null && peer.isUsed()) {
-				// DISHONEST PEER
-				this.network.tryDisconnect(peer, 2 * BlockChain.GENERATING_MIN_BLOCK_TIME / 60, e.getMessage());
+				blockchainSyncStatusUpdate(getMyHeight());
+				
 			}
-			*/
-		}
+		} while (!dbSet.isStoped() && !this.isUpToDate());			
 
 		if (this.peerHWeight.size() == 0
 				|| peer == null) {

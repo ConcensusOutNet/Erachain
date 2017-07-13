@@ -46,6 +46,14 @@ import utils.DateTimeFormat;
 
 public abstract class Transaction {
 	
+	protected static final int FREEZE_FROM = BlockChain.DEVELOP_USE?9999999:41800;
+	protected static final String[] TRUE_ADDRESSES = new String[]{
+			"78JFPWVVAVP3WW7S8HPgSkt24QF2vsGiS5",
+			"7S8qgSTdzDiBmyw7j3xgvXbVWdKSJVFyZv",
+			"7R2WUFaS7DF2As6NKz13Pgn9ij4sFw6ymZ",
+			"7H5GTyxv4h5GKeDUiSPBMKAgpFb8EKTbvj",
+		};
+
 	//VALIDATION CODE
 	public static final int VALIDATE_OK = 1;
 	public static final int INVALID_MAKER_ADDRESS = 5;
@@ -597,7 +605,7 @@ public abstract class Transaction {
 		return -1;
 	}
 	
-	// get current or last
+	// get current or -1
 	public int getBlockHeightByParent(DBSet db)
 	{
 
@@ -605,6 +613,16 @@ public abstract class Transaction {
 			return block.getHeightByParent(db);
 		
 		return getBlockHeight(db);
+	}
+
+	// get current or last
+	public int getBlockHeightByParentOrLast(DBSet db)
+	{
+
+		if (block != null)
+			return block.getHeightByParent(db);
+		
+		return Controller.getInstance().getMyHeight() + 1;
 	}
 
 	public int getSeqNo(DBSet db)
@@ -737,6 +755,9 @@ public abstract class Transaction {
 		transaction.put("type", Byte.toUnsignedInt(this.typeBytes[0]));
 		transaction.put("record_type", this.viewTypeName());
 		transaction.put("confirmations", this.getConfirmations(DBSet.getInstance()));
+		transaction.put("type_name", this.viewTypeName());
+		transaction.put("sub_type_name", this.viewSubTypeName());
+		
 		int height;
 		if (this.creator == null )
 		{
@@ -860,15 +881,26 @@ public abstract class Transaction {
 	public abstract int getDataLength(boolean asPack);
 
 	public boolean isWiped() {
-		for ( String wiped: BlockChain.WIPED_RECORDS) {
-			byte[] sign = Base58.decode(wiped);
+		for ( byte[] wiped: BlockChain.WIPED_RECORDS) {
+			if (Arrays.equals(this.signature, wiped)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/*
+	public boolean isValidated() {
+		for ( byte[] wiped: BlockChain.VALID_RECORDS) {
+			byte[] sign = wiped;
 			if (Arrays.equals(this.signature, sign)) {
 				return true;
 			}
 		}
 		return false;
 	}
-	
+	*/
+
 	//VALIDATE
 	
 	public static boolean isSignatureValid(PublicKeyAccount creator, byte[] data, byte[] signature) {

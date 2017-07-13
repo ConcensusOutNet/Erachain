@@ -25,6 +25,7 @@ public class BlockChain
 
 	//public static final int START_LEVEL = 1;
 	public static final boolean DEVELOP_USE = true;
+	public static final boolean PERSON_SEND_PROTECT = true;
 
 	public static final int TESTNET_PORT = DEVELOP_USE?9065:9045;
 	public static final int MAINNET_PORT = DEVELOP_USE?9066:9046;
@@ -57,10 +58,18 @@ public class BlockChain
 	public static final String[] GENESIS_ADMINS = new String[]{"78JFPWVVAVP3WW7S8HPgSkt24QF2vsGiS5",
 			"7B3gTXXKB226bxTxEHi8cJNfnjSbuuDoMC"};
 
-	public static final String[] WIPED_RECORDS = new String[]{
-			"2yTFTetbUrpZzTU3Y1kRSg3nfdetJDC2diwLJTGosnG7sScTkGaFudrTf6iyCkTfUDjP2rXP7pR1o5Y8M4DuwLe3",
-			"zDLLXWRmL8qhrU9DaxTTG4xrLHgb7xLx5fVrC2NXjRaw2vhzB1PArtgqNe2kxp655saohUcWcsSZ8Bo218ByUzH",
-			};
+	public static final byte[][] WIPED_RECORDS = new byte[][]{
+		Base58.decode("2yTFTetbUrpZzTU3Y1kRSg3nfdetJDC2diwLJTGosnG7sScTkGaFudrTf6iyCkTfUDjP2rXP7pR1o5Y8M4DuwLe3"),
+		Base58.decode("zDLLXWRmL8qhrU9DaxTTG4xrLHgb7xLx5fVrC2NXjRaw2vhzB1PArtgqNe2kxp655saohUcWcsSZ8Bo218ByUzH")
+		//Base58.decode("585CPBAusjDWpx9jyx2S2hsHByTd52wofYB3vVd9SvgZqd3igYHSqpS2gWu2THxNevv4LNkk4RRiJDULvHahPRGr"),
+		//Base58.decode("4xDHswuk5GsmHAeu82qysfdq9GyTxZ798ZQQGquprirrNBr7ACUeLZxBv7c73ADpkEvfBbhocGMhouM9y13sP8dK"),
+		//Base58.decode("2Y81A7YjBji7NDKxYWMeNapSqFWFr8D4PSxBc4dCxSrCCVia6HPy2ZsezYKgeqZugNibAMra6DYT7NKCk6cSVUWX"),
+		//Base58.decode("4drnqT2e8uYdhqz2TqscPYLNa94LWHhMZk4UD2dgjT5fLGMuSRiKmHyyghfMUMKreDLMZ5nCK2EMzUGz3Ggbc6W9")	
+		};
+
+	public static final byte[][] VALID_RECORDS = new byte[][]{
+		};
+
 
 	// CHAIN
 	public static final int CONFIRMS_HARD = 3; // for reference by signature 
@@ -242,7 +251,7 @@ public class BlockChain
 	public int getCheckPoint(DBSet dbSet) {
 		
 		int checkPoint = getHeight(dbSet) - BlockChain.MAX_ORPHAN;
-		checkPoint = 32400;
+		checkPoint = DEVELOP_USE?1:32400;
 		
 		if ( checkPoint > this.checkPoint)
 			this.checkPoint = checkPoint;

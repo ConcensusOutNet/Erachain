@@ -12,14 +12,17 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Observable;
 import java.util.Observer;
 import java.util.Set;
+import java.util.TreeSet;
 
 import javax.swing.JDesktopPane;
 import javax.swing.JFrame;
 import javax.swing.JOptionPane;
+import javax.swing.tree.TreePath;
 
 import org.json.simple.JSONObject;
 
@@ -225,9 +228,29 @@ public void initComponents() {
 				settingsJSON.put("Main_Frame_Selected_Tab", mainPanel.jTabbedPane1.getSelectedIndex()+ "");
 				
 				settingsJSONbuf.put("Main_Frame_Setting", settingsJSON);
-				settingsJSONbuf.put("FileChooser_Path", new String(My_JFileChooser.get_Default_Path().getBytes(Charset.forName("UTF-8"))));
+				settingsJSONbuf.put("FileChooser_Path", new String(My_JFileChooser.get_Default_Path()));
 				settingsJSONbuf.put("FileChooser_Wight", My_JFileChooser.get_Default_Width());
 				settingsJSONbuf.put("FileChooser_Height", My_JFileChooser.get_Default_Height());
+				
+				// saving menu 
+				int tree_Row = 0;
+				HashMap treeJSON = new HashMap();
+				for (int rr = 0; rr< mainPanel.mlp.tree.tree.getRowCount();rr++){
+				
+				if (mainPanel.mlp.tree.tree.isCollapsed(rr)){
+					// write to Json
+					//TreePath tree_Component = mainPanel.mlp.tree.tree.getPathForRow(rr);
+					treeJSON.put(tree_Row++, rr);
+					
+				};
+							
+				}
+				if (!treeJSON.isEmpty()){
+					settingsJSONbuf.put("Main_Tree", treeJSON);
+					
+				}
+				
+				
 				
 				// save setting to setting file
 				try {
@@ -291,8 +314,7 @@ public void initComponents() {
 			if( main_Frame_settingsJSON.containsKey("Main_Frame_Width")) w = new Integer((String) main_Frame_settingsJSON.get("Main_Frame_Width")); // длина
 			
 			
-			setLocation(x, y);
-			setSize(w, h);
+			
 			
 			
 			
@@ -330,20 +352,43 @@ public void initComponents() {
 		
 		
 		} 
-		//else {
+		else {
+			this.setExtendedState(MAXIMIZED_BOTH);
+			
 	//		setExtendedState(MAXIMIZED_BOTH);
 			// mainPanel.jSplitPane1.setDividerLocation(250);
 	//		mainPanel.jSplitPane1.setLastDividerLocation(300);
 
-	//	}
-	
+		}
+		setLocation(x, y);
+		setSize(w, h);
 		mainPanel.jSplitPane1.setOrientation(orientation);
 		mainPanel.jSplitPane1.setLastDividerLocation(devLastLoc);
 		mainPanel.jSplitPane1.setDividerLocation(devLoc);
 		mainPanel.jSplitPane1.set_button_title(); // set title diveders
 													// buttons
 		
-
+		// reat Main tree
+		
+		if (settingsJSONbuf.containsKey("Main_Tree")){
+		JSONObject aa =  (JSONObject) settingsJSONbuf.get("Main_Tree");
+		Iterator<?> it = aa.values().iterator();
+		TreeSet s1 = new TreeSet();
+		while (it.hasNext()){
+			     long d2 = (long) it.next();
+			     s1.add(d2);
+			
+		}
+		Iterator <?> s1_It = s1.iterator();
+		while (s1_It.hasNext()){
+			long sa =  (long) s1_It.next();
+			mainPanel.mlp.tree.tree.collapseRow(Integer.valueOf((int) sa));
+			
+		}
+		
+		
+		
+		}
 	}// </editor-fold>
 
 	

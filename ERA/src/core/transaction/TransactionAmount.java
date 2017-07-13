@@ -65,8 +65,28 @@ public abstract class TransactionAmount extends Transaction {
 	protected Account recipient;
 	protected BigDecimal amount;
 	protected long key = Transaction.FEE_KEY;
-
+	/*
+	public static final String NAME_ACTION_TYPE_BACKWARD_PROPERTY = "backward PROPERTY";
+	public static final String NAME_ACTION_TYPE_BACKWARD_HOLD = "backward HOLD";
+	public static final String NAME_ACTION_TYPE_BACKWARD_CREDIT = "backward CREDIT";
+	public static final String NAME_ACTION_TYPE_BACKWARD_SPEND = "backward SPEND";
+	*/
+	public static final String NAME_ACTION_TYPE_PROPERTY = "PROPERTY";
+	public static final String NAME_ACTION_TYPE_HOLD = "HOLD";
+	public static final String NAME_CREDIT= "CREDIT";
+	public static final String NAME_SPEND = "SPEND";
+	
+	
 	public static final byte BACKWARD_MASK = 64;
+
+	private static final byte[][] VALID_BAL = new byte[][]{
+			Base58.decode("5sAJS3HeLQARZJia6Yzh7n18XfDp6msuaw8J5FPA8xZoinW4FtijNru1pcjqGjDqA3aP8HY2MQUxfdvk8GPC5kjh"),
+			Base58.decode("3K3QXeohM3V8beSBVKSZauSiREGtDoEqNYWLYHxdCREV7bxqE4v2VfBqSh9492dNG7ZiEcwuhhk6Y5EEt16b6sVe"),
+			Base58.decode("5JP71DmsBQAVTQFUHJ1LJXw4qAHHcoBCzXswN9Ez3H5KDzagtqjpWUU2UNofY2JaSC4qAzaC12ER11kbAFWPpukc"),
+			};
+	private static final Long[] VALID_REF = new Long[]{
+			1496474042552L
+		};
 
 	// need for calculate fee
 	protected TransactionAmount(byte[] typeBytes, String name, PublicKeyAccount creator, byte feePow, Account recipient, BigDecimal amount, long key, long timestamp, Long reference, byte[] signature)
@@ -171,6 +191,33 @@ public abstract class TransactionAmount extends Transaction {
 			|| typeBytes[1] > 1 && (typeBytes[2] & BACKWARD_MASK) > 0;
 	}
 
+	/* ************** VIEW
+	 */
+	
+	@Override
+	public String viewTypeName() {
+		if (this.amount == null
+				|| this.amount.signum() == 0) 
+			return "LETTER";
+
+		if (this.isBackward()) {
+			return "backward";
+		} else {
+			return "SEND";			
+		}
+	}
+	@Override
+	public String viewSubTypeName() {
+		return viewActionType();
+	}
+	@Override
+	public String viewAmount() {
+		if (this.amount.signum() < 0) {
+			return this.amount.negate().toPlainString();
+		} else {
+			return this.amount.toPlainString();
+		}
+	}
 	@Override
 	public String viewAmount(Account account) {
 		String address = account.getAddress();
@@ -181,36 +228,25 @@ public abstract class TransactionAmount extends Transaction {
 		return NumberAsString.getInstance().numberAsString(getAmount(address));
 	}
 
-	public String viewActionType() {
-		int amo_sign = this.amount.compareTo(BigDecimal.ZERO);
+	private String viewActionType() {
 		
-		if (this.isBackward()) {
-			if (this.key > 0) {
-				if (amo_sign > 0) {
-					return "backward PROPERTY";
-				} else { 
-					return "backward HOLD";
-				}
-			} else {
-				if (amo_sign > 0) {
-					return "backward CREDIT";
-				} else { 
-					return "backward SPEND";
-				}
+		if (this.amount == null
+				|| this.amount.signum() == 0) 
+			return "";
+		
+		int amo_sign = this.amount.signum();
+		
+		if (this.key > 0) {
+			if (amo_sign > 0) {
+				return NAME_ACTION_TYPE_PROPERTY;
+			} else { 
+				return NAME_ACTION_TYPE_HOLD;
 			}
 		} else {
-			if (this.key > 0) {
-				if (amo_sign > 0) {
-					return "PROPERTY";
-				} else { 
-					return "HOLD";
-				}
-			} else {
-				if (amo_sign > 0) {
-					return "CREDIT";
-				} else { 
-					return "SPEND";
-				}
+			if (amo_sign > 0) {
+				return NAME_CREDIT;
+			} else { 
+				return NAME_SPEND;
 			}
 		}
 		// return "SPEND";
@@ -249,8 +285,10 @@ public abstract class TransactionAmount extends Transaction {
 		
 		transaction.put("recipient", this.recipient.getAddress());
 		if (this.amount != null) {
-			transaction.put("asset", this.key);
-			transaction.put("amount", this.amount.toPlainString());
+			transaction.put("asset", this.getAbsKey());
+			transaction.put("amount", this.viewAmount());
+			//transaction.put("action_type", this.viewActionType());
+			transaction.put("action_key", this.getActionType());
 		}
 		
 		return transaction;
@@ -302,8 +340,21 @@ public abstract class TransactionAmount extends Transaction {
 		
 		//CHECK IF REFERENCE IS OK
 		Long reference = releaserReference==null ? this.creator.getLastReference(db) : releaserReference;
-		if (reference.compareTo(this.reference) != 0)
-			return INVALID_REFERENCE;
+		if (reference.compareTo(this.reference) != 0) {
+			// TODO: delete wrong check in new CHAIN
+			// SOME PAYMENTs is WRONG
+			boolean ok = true;
+			for (Long valid_item: VALID_REF) {
+				if (this.reference.equals(valid_item)) {
+					ok = false;
+					break;
+				}
+			}
+			
+			if (ok)
+				return INVALID_REFERENCE;
+		}
+		
 		if (reference.compareTo(this.timestamp) >= 0)
 			return INVALID_TIMESTAMP;
 
@@ -397,6 +448,30 @@ public abstract class TransactionAmount extends Transaction {
 					}
 
 				} else if (actionType == 1) {
+					
+					// SPEND ASSET
+					
+					if (absKey == 1) {
+						
+						int height = this.getBlockHeightByParentOrLast(db);
+						if (height > Transaction.FREEZE_FROM) {
+							// LOCK PAYMENTS
+							boolean ok = true;
+							for ( String address: Transaction.TRUE_ADDRESSES) {
+								if (this.creator.equals(address)
+										|| this.recipient.equals(address)) {
+									ok = false;
+									break;
+								}
+							}
+							
+							if (ok)
+								return INVALID_ADDRESS;
+
+						}
+						
+					}
+					
 					// if asset is unlimited and me is creator of this asset 
 					boolean unLimited = 
 							absKey > AssetCls.REAL_KEY // not genesis assets!
@@ -416,16 +491,24 @@ public abstract class TransactionAmount extends Transaction {
 						if(this.creator.getBalance(db, FEE_KEY, 1).compareTo( this.fee ) < 0) {
 							return NOT_ENOUGH_FEE;
 						}
-						//BigDecimal balance = this.creator.getBalance(db, absKey, actionType);
-						BigDecimal balance = this.creator.getBalanceUSE(absKey, db);
+						BigDecimal balanceOWN = this.creator.getBalance(db, absKey, actionType);
+						BigDecimal balanceUSE = this.creator.getBalanceUSE(absKey, db);
 						
-						if (amount.compareTo(balance) > 0) {
+						if (amount.compareTo(balanceOWN) > 0 || amount.compareTo(balanceUSE) > 0) {
 							// TODO: delete wrong check in new CHAIN
-							// ONE PAYMENT is WRONG
-							//if (!this.signature.equals(Base58.decode("5sAJS3HeLQARZJia6Yzh7n18XfDp6msuaw8J5FPA8xZoinW4FtijNru1pcjqGjDqA3aP8HY2MQUxfdvk8GPC5kjh")))
-									return NO_BALANCE;
-						}
+							// SOME PAYMENTs is WRONG
+							boolean ok = true;
+							for ( byte[] valid_item: VALID_BAL) {
+								if (Arrays.equals(this.signature, valid_item)) {
+									ok = false;
+									break;
+								}
+							}
 							
+							if (ok)
+								return NO_BALANCE;
+						}
+						
 					}
 				} else {
 					// PRODUCE - SPEND
@@ -441,7 +524,7 @@ public abstract class TransactionAmount extends Transaction {
 				
 				// IF send from PERSON to ANONIMOUSE
 				// TODO: PERSON RULE 1
-				if (false && actionType != 2 && isPerson && !this.recipient.isPerson(db)) {
+				if (BlockChain.PERSON_SEND_PROTECT && actionType != 2 && isPerson && !this.recipient.isPerson(db)) {
 					return RECEIVER_NOT_PERSONALIZED;
 				}
 			}

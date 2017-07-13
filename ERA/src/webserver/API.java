@@ -34,6 +34,7 @@ import org.json.simple.JSONObject;
 import org.json.simple.JSONValue;
 import org.mapdb.Fun.Tuple2;
 import org.mapdb.Fun.Tuple3;
+import org.mapdb.Fun.Tuple4;
 
 import com.google.common.primitives.Bytes;
 import com.google.common.primitives.Ints;
@@ -121,7 +122,7 @@ public class API {
 		Map help = new LinkedHashMap();
 
 		help.put("GET Height", "height");
-		help.put("BLOCK", "--------------");
+		help.put("*** BLOCK ***", "");
 		help.put("GET First Block", "firstblock");
 		help.put("GET Last Block", "lastblock");
 		help.put("GET Block", "block/{signature}");
@@ -129,11 +130,11 @@ public class API {
 		help.put("GET Child Block Signature", "childblocksignature/{signature}");
 		help.put("GET Child Block", "childblock/{signature}");
 
-		help.put("BLOCKS", "----------------");
+		help.put("*** BLOCKS ***", "");
 		help.put("GET Blocks from Height by Limit (end:1 if END is reached)", "blocksfromheight/{height}/{limit}");
 		help.put("GET Blocks Signatures from Height by Limit (end:1 if END id reached)", "/blockssignaturesfromheight/{height}/{limit}");		
 
-		help.put("RECORD", "----------------");
+		help.put("*** RECORD ***", "");
 		help.put("GET Record Parse from RAW", "recordparse/{raw}");
 		help.put("POST Record Parse from RAW", "recordparse?raw=...");
 		help.put("GET Record", "record/{signature}");
@@ -141,7 +142,7 @@ public class API {
 		help.put("GET Record RAW", "recordraw/{signature}");
 		help.put("GET Record RAW by Height and Sequence", "recordrawbynumber/{height-sequence}");
 		
-		help.put("ADDRESS", "---------------");
+		help.put("*** ADDRESS ***", "");
 		help.put("GET Address Validate", "addressvalidate/{address}");
 		help.put("GET Address Last Reference", "addresslastreference/{address}");
 		help.put("GET Address Unconfirmed Last Reference", "addressunconfirmedlastreference/{address}");
@@ -149,26 +150,28 @@ public class API {
 		help.put("GET Address Asset Balance", "addressassetbalance/{address}/{assetid}");
 		help.put("GET Address Assets", "addressassets/{address}");
 		help.put("GET Address Public Key", "addresspublickey/{address}");
+		help.put("GET Address Person Key", "addresspersonkey/{address}");
 		
-		help.put("ASSET", "-----------------");
+		help.put("*** ASSET ***", "");
 		help.put("GET Asset Height", "assetheight");
 		help.put("GET Asset", "asset/{key}");
 		help.put("GET Asset Data", "assetdata/{key}");
 		
-		help.put("ASSETS", "-----------------");
+		help.put("*** ASSETS ***", "");
 		help.put("GET Assets", "assets");
-		help.put("GET Asset Full", "assetsfull");
+		help.put("GET Assets Full", "assetsfull");
+		help.put("GET Assets by Name Filter", "assetsfilter/{filter_name_string}");		
 
-		help.put("PERSON", "-----------------");
+		help.put("*** PERSON ***", "");
 		help.put("GET Person Height", "personheight");
 		help.put("GET Person", "person/{key}");
+		help.put("GET Person by Address", "personbyaddress/{address}");
 		help.put("GET Person Data", "persondata/{key}");
-		
-		help.put("PERSONS", "-----------------");
-		//help.put("GET Persons", "persons");
-		//help.put("GET Persons Full", "personsfull");
 
-		help.put("TOOLS", "");
+		help.put("*** PERSONS ***", "");
+		help.put("GET Persons by Name Filter", "personsfilter/{filter_name_string}");
+
+		help.put("*** TOOLS ***", "");
 		help.put("POST Verify Signature for JSON {\"message\": ..., \"signature\": Base58, \"publickey\": Base58)", "verifysignature");
 		
 		return Response.status(200)
@@ -909,8 +912,35 @@ public class API {
 		}
 	}
 
+	@GET
+	@Path("addresspersonkey/{address}")
+	public Response getPersonKey(@PathParam("address") String address) {
+		
+		// CHECK IF VALID ADDRESS
+		if (!Crypto.getInstance().isValidAddress(address)) {
+			throw ApiErrorFactory.getInstance().createError(
+					//ApiErrorFactory.ERROR_INVALID_ADDRESS);
+					Transaction.INVALID_ADDRESS);
+
+		}
+
+		Tuple4<Long, Integer, Integer, Integer> personItem = DBSet.getInstance().getAddressPersonMap().getItem(address);		
+		
+		if (personItem == null) {
+			throw ApiErrorFactory.getInstance().createError(
+					//ApiErrorFactory.ERROR_INVALID_ASSET_ID);
+					Transaction.CREATOR_NOT_PERSONALIZED);
+		} else {
+			return Response.status(200)
+					.header("Content-Type", "application/json; charset=utf-8")
+					.header("Access-Control-Allow-Origin", "*")
+					.entity("" + personItem.a)
+					.build();
+		}
+	}
+
 	/*
-	 * ************* ASSETS **************
+	 * ************* ASSET **************
 	 */
 	@GET
 	@Path("assetheight")
@@ -947,8 +977,8 @@ public class API {
 				.build();
 		
 	}
+	
 	@GET
-
 	@Path("assetdata/{key}")
 	public Response assetData(@PathParam("key") long key) {
 		
@@ -969,6 +999,10 @@ public class API {
 				.build();
 		
 	}
+	
+	/*
+	 * ************* ASSETS **************
+	 */
 
 	@GET
 	@Path("assets")
@@ -993,8 +1027,41 @@ public class API {
 		
 	}
 
+	@GET
+	@Path("assetsfilter/{filter_name_string}")
+	public Response assetsFilter(@PathParam("filter_name_string") String filter) {
+		
+		
+		if (filter == null || filter.length() < 3) {
+			return Response.status(501)
+					.header("Content-Type", "application/json; charset=utf-8")
+					.header("Access-Control-Allow-Origin", "*")
+					.entity("error - so small filter length")
+					.build();
+		}
+		
+		ItemAssetMap map = DBSet.getInstance().getItemAssetMap();
+		List<ItemCls> list = map.get_By_Name(filter);
+
+		JSONArray array = new JSONArray();
+		
+		if (list != null) {
+			for(ItemCls item: list)
+			{
+				array.add(item.toJson());
+			}
+		}
+		
+		return Response.status(200)
+				.header("Content-Type", "application/json; charset=utf-8")
+				.header("Access-Control-Allow-Origin", "*")
+				.entity(StrJSonFine.convert(array))
+				.build();
+		
+	}
+
 	/*
-	 * ************* PERSONS **************
+	 * ************* PERSON **************
 	 */
 	@GET
 	@Path("personheight")
@@ -1031,8 +1098,8 @@ public class API {
 				.build();
 		
 	}
+	
 	@GET
-
 	@Path("persondata/{key}")
 	public Response personData(@PathParam("key") long key) {
 		
@@ -1054,10 +1121,88 @@ public class API {
 		
 	}
 
+	@GET
+	@Path("personbyaddress/{address}")
+	public Response personbyaddress(@PathParam("address") String address) {
+		
+		// CHECK IF VALID ADDRESS
+		if (!Crypto.getInstance().isValidAddress(address)) {
+			throw ApiErrorFactory.getInstance().createError(
+					//ApiErrorFactory.ERROR_INVALID_ADDRESS);
+					Transaction.INVALID_ADDRESS);
+
+		}
+
+		Tuple4<Long, Integer, Integer, Integer> personItem = DBSet.getInstance().getAddressPersonMap().getItem(address);		
+		
+		if (personItem == null) {
+			throw ApiErrorFactory.getInstance().createError(
+					//ApiErrorFactory.ERROR_INVALID_ASSET_ID);
+					Transaction.ITEM_PERSON_NOT_EXIST);
+		}
+
+		long key = personItem.a;
+		ItemPersonMap map = DBSet.getInstance().getItemPersonMap();
+		// DOES EXIST
+		if (!map.contains(key)) {
+			throw ApiErrorFactory.getInstance().createError(
+					//ApiErrorFactory.ERROR_INVALID_ASSET_ID);
+					Transaction.ITEM_PERSON_NOT_EXIST);
+		}
+		
+		PersonCls person = (PersonCls)map.get(key);
+		
+		return Response.status(200)
+				.header("Content-Type", "application/json; charset=utf-8")
+				.header("Access-Control-Allow-Origin", "*")
+				.entity(StrJSonFine.convert(person.toJson()))
+				.build();
+		
+	}
+	
+	
+	/*
+	 * ************* PERSONS **************
+	 */
+
+	@GET
+	@Path("personsfilter/{filter_name_string}")
+	public Response personsFilter(@PathParam("filter_name_string") String filter) {
+		
+		if (filter == null || filter.length() < 3) {
+			return Response.status(501)
+					.header("Content-Type", "application/json; charset=utf-8")
+					.header("Access-Control-Allow-Origin", "*")
+					.entity("error - so small filter length")
+					.build();
+		}
+
+		ItemPersonMap map = DBSet.getInstance().getItemPersonMap();
+		// DOES ASSETID EXIST
+		List<ItemCls> list = map.get_By_Name(filter);
+
+		JSONArray array = new JSONArray();
+		
+		if (list != null) {
+			for(ItemCls item: list)
+			{
+				array.add(item.toJson());
+			}
+		}
+		
+		return Response.status(200)
+				.header("Content-Type", "application/json; charset=utf-8")
+				.header("Access-Control-Allow-Origin", "*")
+				.entity(StrJSonFine.convert(array))
+				.build();
+		
+	}
+
 
 	/*
 	 * ************* TOOLS **************
 	 */
+	
 	@POST
 	@Path("verifysignature")
 	public String verifysignature(String x) {

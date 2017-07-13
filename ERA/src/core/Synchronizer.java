@@ -43,7 +43,7 @@ public class Synchronizer
 	}
 	
 	static boolean USE_AT_ORPHAN = false;
-	static int BAN_BLOCK_TIMES = BlockChain.GENERATING_MIN_BLOCK_TIME / 60 * 30;
+	public static int BAN_BLOCK_TIMES = BlockChain.GENERATING_MIN_BLOCK_TIME / 60 * 32;
 	
 	public Peer getPeer() {
 		return fromPeer;
@@ -236,7 +236,6 @@ public class Synchronizer
 			return;
 		}
 
-
 		/*
 		LOGGER.error("Synchronizing from peer: " + peer.toString() + ":"
 					+ peer.getAddress().getHostAddress() + " - " + peer.getPing());
@@ -249,7 +248,9 @@ public class Synchronizer
 		// FIND HEADERS for common CHAIN
 		if (Arrays.equals(peer.getAddress().getAddress(), PEER_TEST)) {
 			LOGGER.info("Synchronizing from peer: " + peer.toString() + ":"
-					+ peer.getAddress().getHostAddress() + ", ping: " + peer.getPing());			
+					+ peer.getAddress().getHostAddress()
+					//+ ", ping: " + peer.getPing()
+					);			
 		}
 		Tuple2<byte[], List<byte[]>> signatures = this.findHeaders(peer, lastBlockSignature, checkPointHeight);
 		if (signatures.b.size() == 0) {
@@ -307,7 +308,7 @@ public class Synchronizer
 					
 					//INVALID BLOCK THROW EXCEPTION
 					String mess = "Dishonest peer on block null";
-					peer.ban(10, mess);
+					peer.ban(BAN_BLOCK_TIMES>>2, mess);
 					throw new Exception(mess);
 				}
 				blockFromPeer.setCalcGeneratingBalance(dbSet); // NEED SET it
@@ -327,7 +328,7 @@ public class Synchronizer
 
 					//INVALID BLOCK THROW EXCEPTION
 					String mess = "Dishonest peer on block " + blockFromPeer.getHeight(dbSet);
-					peer.ban(BAN_BLOCK_TIMES, mess);
+					peer.ban(BAN_BLOCK_TIMES>>1, mess);
 					throw new Exception(mess);
 				}
 			}
@@ -435,9 +436,9 @@ public class Synchronizer
 			maxChainHeight = checkPointHeight;
 		}
 
-		LOGGER.info("core.Synchronizer.findLastCommonBlock(Peer) for: "
+		LOGGER.info("findLastCommonBlock(Peer) for: "
 				+ " getBlockMap().getLastBlock: " + maxChainHeight
-				+ "to minHeight: " + checkPointHeight);
+				+ " to minHeight: " + checkPointHeight);
 
 		// try get check point block from peer
 		// GENESIS block nake ERROR in network.Peer.sendMessage(Message) -> this.out.write(message.toBytes());
@@ -456,9 +457,9 @@ public class Synchronizer
 		
 		try {
 			// try get common block from PEER
-			checkPointHeightCommonBlock = getBlock(checkPointHeightSignature, peer);
+			checkPointHeightCommonBlock = getBlock(checkPointHeightSignature, peer, true);
 		} catch (Exception e) {
-			String mess = "Dishonest peer - error in PEER: " + peer.getAddress().getHostAddress();
+			String mess = "in getBlock:\n" + e.getMessage() + "\n *** in Peer: " + peer.getAddress().getHostAddress();
 			//// banned in getBlock -- peer.ban(BAN_BLOCK_TIMES>>3, mess);
 			throw new Exception(mess);
 		}
@@ -467,7 +468,7 @@ public class Synchronizer
 				|| checkPointHeightSignature == null) {
 			String mess = "Dishonest peer: my block[" + checkPointHeight
 					+ "\n -> common BLOCK not found";
-			peer.ban(BAN_BLOCK_TIMES, mess);
+			peer.ban(BAN_BLOCK_TIMES>>1, mess);
 
 			throw new Exception(mess);
 		}
@@ -501,7 +502,7 @@ public class Synchronizer
 		if (false && headers.isEmpty()) {
 			String mess = "Dishonest peer by headers.size==0 " + peer.getAddress().getHostAddress();
 			
-			peer.ban(BAN_BLOCK_TIMES, mess);
+			peer.ban(BAN_BLOCK_TIMES>>1, mess);
 			throw new Exception(mess);
 		}
 
@@ -520,7 +521,7 @@ public class Synchronizer
 			}
 
 			//ADD TO LIST
-			Block block = getBlock(signature, peer);
+			Block block = getBlock(signature, peer, false);
 			// NOW generating balance not was send by NET
 			// need to SET it!
 			block.setCalcGeneratingBalance(dbSet);
@@ -531,7 +532,8 @@ public class Synchronizer
 		return blocks;
 	}
 	
-	public static Block getBlock(byte[] signature, Peer peer) throws Exception
+	// chack = true - check this signature in peer
+	public static Block getBlock(byte[] signature, Peer peer, boolean check) throws Exception
 	{
 		
 		//CREATE MESSAGE
@@ -543,23 +545,29 @@ public class Synchronizer
 		//CHECK IF WE GOT RESPONSE
 		if(response == null)
 		{
-			//ERROR
-			throw new Exception("Peer timed out");
+			if (check) {
+				return null;
+			} else {
+				//ERROR
+				throw new Exception("Peer timed out");
+			}
 		}
 		
 		Block block = response.getBlock();
 		if(block == null)
 		{
-			String mess = "*** Block is NULL";
-			peer.ban(600, mess);
+			int banTime = BAN_BLOCK_TIMES>>2;
+			String mess = "*** Dishonest peer - Block is NULL. Ban for " + banTime;
+			peer.ban(banTime, mess);
 			throw new Exception(mess);
 		}
 		
 		//CHECK BLOCK SIGNATURE
 		if(!block.isSignatureValid())
 		{
-			String mess = "*** Invalid block --signature";
-			peer.ban(600, mess);
+			int banTime = BAN_BLOCK_TIMES;
+			String mess = "*** Dishonest peer - Invalid block --signature. Ban for " + banTime;
+			peer.ban(banTime, mess);
 			throw new Exception(mess);
 		}
 		
